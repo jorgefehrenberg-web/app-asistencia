@@ -253,14 +253,37 @@
             html5QrcodeScanner = new Html5Qrcode("reader");
             html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
                 stopCameraScanner();
-                navigator.geolocation.getCurrentPosition((pos) => {
-                    const formBody = `action=registerAttendance&nombre=${encodeURIComponent(document.getElementById('student-name').value)}&email=${encodeURIComponent(document.getElementById('student-email').value)}&deviceId=${getDeviceId()}&token=${encodeURIComponent(text)}&latitud=${pos.coords.latitude}&longitud=${pos.coords.longitude}`;
-                    fetch(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, mode: 'no-cors', body: formBody })
-                    .then(() => showToast('✓ ¡Asistencia Exitosa!', 'Registrado correctamente.', 'emerald'));
-                });
+                
+                // Intenta obtener GPS, si falla o no hay permiso, envía igual con 0,0
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            enviarDatosFila(text, pos.coords.latitude, pos.coords.longitude);
+                        },
+                        (error) => {
+                            console.log("Error de GPS, enviando sin ubicación");
+                            enviarDatosFila(text, 0, 0);
+                        },
+                        { timeout: 5000 }
+                    );
+                } else {
+                    enviarDatosFila(text, 0, 0);
+                }
             }, null);
         };
 
+        const enviarDatosFila = (tokenText, lat, lng) => {
+            const formBody = `action=registerAttendance&nombre=${encodeURIComponent(document.getElementById('student-name').value)}&email=${encodeURIComponent(document.getElementById('student-email').value)}&deviceId=${getDeviceId()}&token=${encodeURIComponent(tokenText)}&latitud=${lat}&longitud=${lng}`;
+            
+            console.log("Enviando datos a Google Sheets...");
+            
+            fetch(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, mode: 'no-cors', body: formBody })
+            .then(() => {
+                showToast('✓ ¡Asistencia Exitosa!', 'Registrado correctamente.', 'emerald');
+                console.log("Petición enviada correctamente.");
+            })
+            .catch(err => console.error("Error al enviar fetch:", err));
+        };
         const stopCameraScanner = () => {
             if (html5QrcodeScanner) html5QrcodeScanner.stop().then(() => html5QrcodeScanner = null);
             document.getElementById('camera-container').classList.add('hidden-section');
